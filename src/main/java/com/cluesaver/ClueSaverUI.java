@@ -1,52 +1,31 @@
 package com.cluesaver;
 
-import java.time.temporal.ChronoUnit;
-import javax.swing.SwingUtilities;
+import java.awt.Dimension;
+import java.awt.Graphics2D;
+import java.awt.Rectangle;
+import java.awt.event.MouseEvent;
+import java.awt.image.BufferedImage;
+import javax.inject.Inject;
+import lombok.extern.slf4j.Slf4j;
 import net.runelite.api.Client;
 import net.runelite.client.callback.ClientThread;
-import net.runelite.client.input.MouseManager;
-import net.runelite.client.task.Schedule;
-import net.runelite.client.ui.FontManager;
+import net.runelite.client.input.MouseListener;
 import net.runelite.client.ui.overlay.Overlay;
 import net.runelite.client.ui.overlay.OverlayLayer;
 import net.runelite.client.ui.overlay.OverlayPosition;
 import net.runelite.client.util.ImageUtil;
-import javax.inject.Inject;
-import java.awt.*;
-import java.awt.image.BufferedImage;
-import java.awt.Point;
-import java.awt.event.MouseEvent;
-import lombok.extern.slf4j.Slf4j;
-import net.runelite.client.input.MouseListener;
 
 @Slf4j
 public class ClueSaverUI extends Overlay implements MouseListener {
-	private final BufferedImage closedUIImage;
-	private final BufferedImage buttonUIImage;
-	private final BufferedImage buttonUIHoveredImage;
-	private final BufferedImage expandedUIImage;
-	private final BufferedImage clueScrollBeginnerImage;
-	private final BufferedImage clueScrollEasyImage;
-	private final BufferedImage clueScrollMediumImage;
-	private final BufferedImage clueScrollHardImage;
-	private final BufferedImage clueScrollEliteImage;
-	private final BufferedImage clueScrollMasterImage;
+	private final Client client;
+	private final ClientThread clientThread;
+	private final ClueSaverConfig config;
 	private final ClueSaverUtils clueSaverUtils;
 	private final ClueSaverPlugin clueSaverPlugin;
 	private final ClueStates clueStates;
-	private final BufferedImage pipImage;
-	private final BufferedImage pipGreenImage;
-	private final BufferedImage pipOrangeImage;
-	private final BufferedImage pipRedImage;
-	private final ClueSaverConfig config;
-	private BufferedImage invIcon;
-	private BufferedImage bankIcon;
-	private BufferedImage activeClueSaver;
 	private boolean shouldDraw = false;
 	private boolean isButtonHovered = false;
 	private boolean isExpanded = false;
-	private final Client client;
-	private final ClientThread clientThread;
 	private Rectangle buttonBounds;
 	private Rectangle beginnerIconBounds;
 	private Rectangle easyIconBounds;
@@ -54,6 +33,23 @@ public class ClueSaverUI extends Overlay implements MouseListener {
 	private Rectangle hardIconBounds;
 	private Rectangle eliteIconBounds;
 	private Rectangle masterIconBounds;
+	private final BufferedImage closedUIImage;
+	private final BufferedImage expandedUIImage;
+	private final BufferedImage buttonUIImage;
+	private final BufferedImage buttonUIHoveredImage;
+	private final BufferedImage clueScrollBeginnerImage;
+	private final BufferedImage clueScrollEasyImage;
+	private final BufferedImage clueScrollMediumImage;
+	private final BufferedImage clueScrollHardImage;
+	private final BufferedImage clueScrollEliteImage;
+	private final BufferedImage clueScrollMasterImage;
+	private final BufferedImage pipImage;
+	private final BufferedImage pipGreenImage;
+	private final BufferedImage pipOrangeImage;
+	private final BufferedImage pipRedImage;
+	private BufferedImage activeClueSaver;
+	private BufferedImage invIcon;
+	private BufferedImage bankIcon;
 
 	@Inject
 	public ClueSaverUI(Client client, ClientThread clientThread,
@@ -86,28 +82,6 @@ public class ClueSaverUI extends Overlay implements MouseListener {
 		invIcon = ImageUtil.loadImageResource(getClass(), "/com/cluesaver/invIcon.png");
 		bankIcon = ImageUtil.loadImageResource(getClass(), "/com/cluesaver/bankIcon.png");
 		activeClueSaver = ImageUtil.loadImageResource(getClass(), "/com/cluesaver/activeClueSaver.png");
-
-		if (closedUIImage == null || buttonUIImage == null ||
-			buttonUIHoveredImage == null || expandedUIImage == null) {
-			log.debug("Failed to load one or more UI images");
-		} else {
-			log.debug("Successfully loaded all UI images");
-		}
-		if (pipImage == null || pipGreenImage == null) {
-			log.debug("Failed to load pip images - pip: {}, pipGreen: {}",
-				pipImage != null, pipGreenImage != null);
-		} else {
-			log.debug("Successfully loaded pip images");
-		}
-		log.info("ClueSaverUI initialized with:");
-		log.info("ClueSaverUtils: {}", clueSaverUtils != null ? "present" : "null");
-		log.info("ClueSaverPlugin: {}", clueSaverPlugin != null ? "present" : "null");
-		log.info("ClueStates: {}", clueStates != null ? "present" : "null");
-	}
-
-
-	public void setVisible(boolean visible) {
-		this.shouldDraw = visible;
 	}
 
 	@Override
@@ -135,7 +109,6 @@ public class ClueSaverUI extends Overlay implements MouseListener {
 
 			int currentY = startY;
 
-
 			for (ClueTier tier : ClueTier.values()) {
 				if (!shouldShowTier(tier)) {
 					continue;
@@ -147,6 +120,7 @@ public class ClueSaverUI extends Overlay implements MouseListener {
 				int totalBoxes = 0;
 				boolean hasClueInInventory = false;
 				boolean hasClueInBank = false;
+				// This needs to be fixed so badly
 				String savingCause = clueSaverPlugin.getTierSavingCause(tier, true);
 				if (savingCause != null) {
 					String cleanedCause = savingCause
@@ -221,19 +195,6 @@ public class ClueSaverUI extends Overlay implements MouseListener {
 		return null;
 	}
 
-
-	private Rectangle getIconBounds(ClueTier tier) {
-		switch (tier) {
-			case BEGINNER: return beginnerIconBounds;
-			case EASY: return easyIconBounds;
-			case MEDIUM: return mediumIconBounds;
-			case HARD: return hardIconBounds;
-			case ELITE: return eliteIconBounds;
-			case MASTER: return masterIconBounds;
-			default: return new Rectangle();
-		}
-	}
-
 	private void updateIconBounds(ClueTier tier, int x, int y, BufferedImage image) {
 		Rectangle bounds = new Rectangle(x, y, image.getWidth(), image.getHeight());
 		switch (tier) {
@@ -255,6 +216,18 @@ public class ClueSaverUI extends Overlay implements MouseListener {
 			case MASTER:
 				masterIconBounds = bounds;
 				break;
+		}
+	}
+
+	private Rectangle getIconBounds(ClueTier tier) {
+		switch (tier) {
+			case BEGINNER: return beginnerIconBounds;
+			case EASY: return easyIconBounds;
+			case MEDIUM: return mediumIconBounds;
+			case HARD: return hardIconBounds;
+			case ELITE: return eliteIconBounds;
+			case MASTER: return masterIconBounds;
+			default: return new Rectangle();
 		}
 	}
 
@@ -289,6 +262,9 @@ public class ClueSaverUI extends Overlay implements MouseListener {
 		}
 	}
 
+	public void setVisible(boolean visible) {
+		this.shouldDraw = visible;
+	}
 
 	@Override
 	public MouseEvent mouseClicked(MouseEvent e) {
@@ -338,47 +314,5 @@ public class ClueSaverUI extends Overlay implements MouseListener {
 	@Override
 	public MouseEvent mouseDragged(MouseEvent e) {
 		return e;
-	}
-
-	private void logDebugInfo() {
-		if (clueStates == null) {
-			log.info("ClueStates is null");
-			return;
-		}
-
-		log.info("=== ClueStates Status Update ===");
-		for (ClueTier tier : ClueTier.values()) {
-			ClueScrollState clueState = clueStates.getClueStateFromTier(tier);
-			ScrollBoxState boxState = clueStates.getBoxStateFromTier(tier);
-			String savingCause = clueSaverPlugin.getTierSavingCause(tier, true);
-			int maxClueCount = clueSaverUtils.getMaxClueCount(tier, client);
-
-			StringBuilder status = new StringBuilder();
-			status.append(String.format("[%s] ", tier));
-
-			status.append(String.format("Max: %d", maxClueCount));
-
-			if (clueState != null) {
-				status.append(String.format(", Clue: %s",
-					clueState.getLocation() != ClueLocation.UNKNOWN ? clueState.getLocation() : "none"));
-			}
-
-			if (boxState != null) {
-				int totalBoxes = boxState.getTotalCount();
-				status.append(String.format(", Boxes: %d", totalBoxes));
-			}
-
-			if (savingCause != null && !savingCause.isEmpty()) {
-				String cleanCause = savingCause
-					.replaceAll("<col=[^>]+>", "")
-					.replaceAll("</col>", "")
-					.replaceAll("<br>", " | ")
-					.trim();
-				status.append(String.format(" | %s", cleanCause));
-			}
-
-			log.info(status.toString());
-		}
-		log.info("===========================");
 	}
 }
