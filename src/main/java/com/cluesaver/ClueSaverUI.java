@@ -36,6 +36,12 @@ public class ClueSaverUI extends Overlay implements MouseListener {
 	private final ClueStates clueStates;
 	private final BufferedImage pipImage;
 	private final BufferedImage pipGreenImage;
+	private final BufferedImage pipOrangeImage;
+	private final BufferedImage pipRedImage;
+	private final ClueSaverConfig config;
+	private BufferedImage invIcon;
+	private BufferedImage bankIcon;
+	private BufferedImage activeClueSaver;
 	private boolean shouldDraw = false;
 	private boolean isButtonHovered = false;
 	private boolean isExpanded = false;
@@ -52,7 +58,8 @@ public class ClueSaverUI extends Overlay implements MouseListener {
 	@Inject
 	public ClueSaverUI(Client client, ClientThread clientThread,
 					   ClueSaverUtils clueSaverUtils, ClueSaverPlugin clueSaverPlugin,
-					   ClueStates clueStates) {
+					   ClueStates clueStates, ClueSaverConfig config) {
+		this.config = config;
 		this.client = client;
 		this.clientThread = clientThread;
 		this.clueSaverUtils = clueSaverUtils;
@@ -74,6 +81,12 @@ public class ClueSaverUI extends Overlay implements MouseListener {
 		clueScrollMasterImage = ImageUtil.loadImageResource(getClass(), "/com/cluesaver/cluescrollMaster.png");
 		pipImage = ImageUtil.loadImageResource(getClass(), "/com/cluesaver/pip.png");
 		pipGreenImage = ImageUtil.loadImageResource(getClass(), "/com/cluesaver/pipGreen.png");
+		pipOrangeImage = ImageUtil.loadImageResource(getClass(), "/com/cluesaver/pipOrange.png");
+		pipRedImage = ImageUtil.loadImageResource(getClass(), "/com/cluesaver/pipRed.png");
+		invIcon = ImageUtil.loadImageResource(getClass(), "/com/cluesaver/invIcon.png");
+		bankIcon = ImageUtil.loadImageResource(getClass(), "/com/cluesaver/bankIcon.png");
+		activeClueSaver = ImageUtil.loadImageResource(getClass(), "/com/cluesaver/activeClueSaver.png");
+
 		if (closedUIImage == null || buttonUIImage == null ||
 			buttonUIHoveredImage == null || expandedUIImage == null) {
 			log.debug("Failed to load one or more UI images");
@@ -108,7 +121,6 @@ public class ClueSaverUI extends Overlay implements MouseListener {
 			log.info("ClueStates is null in render method");
 			return null;
 		}
-
 		final int closedUIX = 0;
 		final int closedUIY = (client.getCanvasHeight() - closedUIImage.getHeight()) / 2;
 		graphics.drawImage(closedUIImage, closedUIX, closedUIY, null);
@@ -123,15 +135,18 @@ public class ClueSaverUI extends Overlay implements MouseListener {
 
 			int currentY = startY;
 
-			graphics.setColor(Color.WHITE);
-			graphics.setFont(new Font("Arial", Font.BOLD, 12));
 
 			for (ClueTier tier : ClueTier.values()) {
+				if (!shouldShowTier(tier)) {
+					continue;
+				}
 				BufferedImage clueImage = getClueImage(tier);
 				if (clueImage == null) continue;
 				int nextY = currentY + clueImage.getHeight() + padding;
 				graphics.drawImage(clueImage, startX, currentY, null);
 				int totalBoxes = 0;
+				boolean hasClueInInventory = false;
+				boolean hasClueInBank = false;
 				String savingCause = clueSaverPlugin.getTierSavingCause(tier, true);
 				if (savingCause != null) {
 					String cleanedCause = savingCause
@@ -144,10 +159,28 @@ public class ClueSaverUI extends Overlay implements MouseListener {
 							try {
 								String countStr = part.substring(part.indexOf("Scroll Boxes:") + "Scroll Boxes:".length()).trim();
 								totalBoxes = Integer.parseInt(countStr);
-								break;
 							} catch (Exception e) {
 							}
 						}
+						if (part.contains("Clue in inventory")) {
+							hasClueInInventory = true;
+							totalBoxes++;
+						} else if (part.contains("Clue in bank")) {
+							hasClueInBank = true;
+							totalBoxes++;
+						}
+					}
+
+					if (hasClueInInventory && invIcon != null) {
+						int invIconX = startX + clueImage.getWidth() - invIcon.getWidth();
+						int invIconY = currentY + clueImage.getHeight() - invIcon.getHeight();
+						graphics.drawImage(invIcon, invIconX, invIconY, null);
+					}
+
+					if (hasClueInBank && bankIcon != null) {
+						int bankIconX = startX + clueImage.getWidth() - bankIcon.getWidth();
+						int bankIconY = currentY + clueImage.getHeight() - bankIcon.getHeight();
+						graphics.drawImage(bankIcon, bankIconX, bankIconY, null);
 					}
 				}
 
@@ -155,9 +188,17 @@ public class ClueSaverUI extends Overlay implements MouseListener {
 				int pipStartY = currentY + clueImage.getHeight();
 				int maxClueCount = clueSaverUtils.getMaxClueCount(tier, client);
 
+				if (totalBoxes >= maxClueCount && activeClueSaver != null) {
+					graphics.drawImage(activeClueSaver, startX, currentY, null);
+				}
+
 				for (int pip = maxClueCount - 1; pip >= 0; pip--) {
 					int pipY = pipStartY - ((pip + 1) * (pipImage.getHeight() - 1)) - 6;
-					if (pip < totalBoxes) {
+					if (totalBoxes >= maxClueCount) {
+						graphics.drawImage(pipRedImage, pipX, pipY, null);
+					} else if (maxClueCount - totalBoxes == 1 && pip < totalBoxes) {
+						graphics.drawImage(pipOrangeImage, pipX, pipY, null);
+					} else if (pip < totalBoxes) {
 						graphics.drawImage(pipGreenImage, pipX, pipY, null);
 					} else {
 						graphics.drawImage(pipImage, pipX, pipY, null);
@@ -166,6 +207,7 @@ public class ClueSaverUI extends Overlay implements MouseListener {
 				updateIconBounds(tier, startX, currentY, clueImage);
 				currentY = nextY;
 			}
+
 		}
 
 		final int buttonUIX = closedUIX + closedUIImage.getWidth() +
@@ -178,6 +220,7 @@ public class ClueSaverUI extends Overlay implements MouseListener {
 
 		return null;
 	}
+
 
 	private Rectangle getIconBounds(ClueTier tier) {
 		switch (tier) {
@@ -226,6 +269,26 @@ public class ClueSaverUI extends Overlay implements MouseListener {
 			default: return null;
 		}
 	}
+
+	private boolean shouldShowTier(ClueTier tier) {
+		switch (tier) {
+			case BEGINNER:
+				return config.showBeginnerInfo();
+			case EASY:
+				return config.showEasyInfo();
+			case MEDIUM:
+				return config.showMediumInfo();
+			case HARD:
+				return config.showHardInfo();
+			case ELITE:
+				return config.showEliteInfo();
+			case MASTER:
+				return config.showMasterInfo();
+			default:
+				return false;
+		}
+	}
+
 
 	@Override
 	public MouseEvent mouseClicked(MouseEvent e) {
