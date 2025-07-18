@@ -1,8 +1,12 @@
 package com.cluesaver;
 
+import java.time.temporal.ChronoUnit;
+import javax.swing.SwingUtilities;
 import net.runelite.api.Client;
 import net.runelite.client.callback.ClientThread;
 import net.runelite.client.input.MouseManager;
+import net.runelite.client.task.Schedule;
+import net.runelite.client.ui.FontManager;
 import net.runelite.client.ui.overlay.Overlay;
 import net.runelite.client.ui.overlay.OverlayLayer;
 import net.runelite.client.ui.overlay.OverlayPosition;
@@ -38,9 +42,12 @@ public class ClueSaverUI extends Overlay implements MouseListener {
 	private final Client client;
 	private final ClientThread clientThread;
 	private Rectangle buttonBounds;
-
-	@Inject
-	private TierStateSaveManager tierSaveManager;
+	private Rectangle beginnerIconBounds;
+	private Rectangle easyIconBounds;
+	private Rectangle mediumIconBounds;
+	private Rectangle hardIconBounds;
+	private Rectangle eliteIconBounds;
+	private Rectangle masterIconBounds;
 
 	@Inject
 	public ClueSaverUI(Client client, ClientThread clientThread,
@@ -79,8 +86,12 @@ public class ClueSaverUI extends Overlay implements MouseListener {
 		} else {
 			log.debug("Successfully loaded pip images");
 		}
-
+		log.info("ClueSaverUI initialized with:");
+		log.info("ClueSaverUtils: {}", clueSaverUtils != null ? "present" : "null");
+		log.info("ClueSaverPlugin: {}", clueSaverPlugin != null ? "present" : "null");
+		log.info("ClueStates: {}", clueStates != null ? "present" : "null");
 	}
+
 
 	public void setVisible(boolean visible) {
 		this.shouldDraw = visible;
@@ -90,6 +101,11 @@ public class ClueSaverUI extends Overlay implements MouseListener {
 	public Dimension render(Graphics2D graphics) {
 		if (!shouldDraw || closedUIImage == null || buttonUIImage == null ||
 			buttonUIHoveredImage == null || expandedUIImage == null) {
+			return null;
+		}
+
+		if (clueStates == null) {
+			log.info("ClueStates is null in render method");
 			return null;
 		}
 
@@ -105,100 +121,50 @@ public class ClueSaverUI extends Overlay implements MouseListener {
 			final int startY = expandedUIY + 3;
 			final int padding = 2;
 
-			ClueTier[] tiers = {
-				ClueTier.BEGINNER,
-				ClueTier.EASY,
-				ClueTier.MEDIUM,
-				ClueTier.HARD,
-				ClueTier.ELITE,
-				ClueTier.MASTER
-			};
-
-			BufferedImage[] clueScrolls = {
-				clueScrollBeginnerImage,
-				clueScrollEasyImage,
-				clueScrollMediumImage,
-				clueScrollHardImage,
-				clueScrollEliteImage,
-				clueScrollMasterImage
-			};
-
 			int currentY = startY;
-			int lastIndex = clueScrolls.length - 1;
-			while (lastIndex >= 0 && clueScrolls[lastIndex] == null) {
-				lastIndex--;
-			}
 
-			if (clueScrolls[0] != null) {
-				graphics.drawImage(clueScrolls[0], startX, currentY, null);
-				currentY += clueScrolls[0].getHeight() + padding;
-			}
+			graphics.setColor(Color.WHITE);
+			graphics.setFont(new Font("Arial", Font.BOLD, 12));
 
-			for (int i = 1; i <= lastIndex; i++) {
-				if (clueScrolls[i] != null) {
-					int maxClueCount = clueSaverUtils.getMaxClueCount(tiers[i-1], client);
-					if (pipImage != null && maxClueCount > 0) {
-						int pipX = startX - 5;
-						int pipStartY = currentY;
+			for (ClueTier tier : ClueTier.values()) {
+				BufferedImage clueImage = getClueImage(tier);
+				if (clueImage == null) continue;
+				int nextY = currentY + clueImage.getHeight() + padding;
+				graphics.drawImage(clueImage, startX, currentY, null);
+				int totalBoxes = 0;
+				String savingCause = clueSaverPlugin.getTierSavingCause(tier, true);
+				if (savingCause != null) {
+					String cleanedCause = savingCause
+						.replaceAll("<col=[^>]+>", "")
+						.replaceAll("</col>", "");
 
-						String savingCause = clueSaverPlugin.getTierSavingCause(tiers[i-1]);
-						int heldClueCount = 0;
-
-						if (savingCause != null) {
-							ScrollBoxState boxState = clueStates.getBoxStateFromTier(tiers[i-1]);
-							ClueScrollState clueState = clueStates.getClueStateFromTier(tiers[i-1]);
-							heldClueCount = boxState.getTotalCount();
-							if (clueState.getLocation() == ClueLocation.INVENTORY) {
-								heldClueCount += 1;
-							}
-						}
-
-						for (int pip = maxClueCount - 1; pip >= 0; pip--) {
-							int pipY = pipStartY - ((pip + 1) * (pipImage.getHeight() - 1)) - 8;
-
-							if (pip < heldClueCount) {
-								graphics.drawImage(pipGreenImage, pipX, pipY, null);
-							} else {
-								graphics.drawImage(pipImage, pipX, pipY, null);
+					String[] parts = cleanedCause.split(" \\| ");
+					for (String part : parts) {
+						if (part.contains("Scroll Boxes:")) {
+							try {
+								String countStr = part.substring(part.indexOf("Scroll Boxes:") + "Scroll Boxes:".length()).trim();
+								totalBoxes = Integer.parseInt(countStr);
+								break;
+							} catch (Exception e) {
 							}
 						}
 					}
-
-					graphics.drawImage(clueScrolls[i], startX, currentY, null);
-					currentY += clueScrolls[i].getHeight() + padding;
 				}
-			}
 
-			if (lastIndex >= 0) {
-				int maxClueCount = clueSaverUtils.getMaxClueCount(tiers[lastIndex], client);
-				if (pipImage != null && maxClueCount > 0) {
-					int pipX = startX - 5;
-					int pipStartY = currentY;
+				int pipX = startX - 5;
+				int pipStartY = currentY + clueImage.getHeight();
+				int maxClueCount = clueSaverUtils.getMaxClueCount(tier, client);
 
-					String savingCause = clueSaverPlugin.getTierSavingCause(tiers[lastIndex]);
-
-					int heldClueCount = 0;
-
-					if (savingCause != null) {
-						ScrollBoxState boxState = clueStates.getBoxStateFromTier(tiers[lastIndex]);
-						ClueScrollState clueState = clueStates.getClueStateFromTier(tiers[lastIndex]);
-						heldClueCount = boxState.getTotalCount();
-						if (clueState.getLocation() == ClueLocation.INVENTORY) {
-							heldClueCount += 1;
-						}
-					}
-
-
-					for (int pip = maxClueCount - 1; pip >= 0; pip--) {
-						int pipY = pipStartY - ((pip + 1) * (pipImage.getHeight() - 1)) - 8;
-
-						if (pip < heldClueCount) {
-							graphics.drawImage(pipGreenImage, pipX, pipY, null);
-						} else {
-							graphics.drawImage(pipImage, pipX, pipY, null);
-						}
+				for (int pip = maxClueCount - 1; pip >= 0; pip--) {
+					int pipY = pipStartY - ((pip + 1) * (pipImage.getHeight() - 1)) - 6;
+					if (pip < totalBoxes) {
+						graphics.drawImage(pipGreenImage, pipX, pipY, null);
+					} else {
+						graphics.drawImage(pipImage, pipX, pipY, null);
 					}
 				}
+				updateIconBounds(tier, startX, currentY, clueImage);
+				currentY = nextY;
 			}
 		}
 
@@ -209,7 +175,56 @@ public class ClueSaverUI extends Overlay implements MouseListener {
 			buttonUIImage.getWidth(), buttonUIImage.getHeight());
 		BufferedImage buttonToDraw = isButtonHovered ? buttonUIHoveredImage : buttonUIImage;
 		graphics.drawImage(buttonToDraw, buttonUIX, buttonUIY, null);
+
 		return null;
+	}
+
+	private Rectangle getIconBounds(ClueTier tier) {
+		switch (tier) {
+			case BEGINNER: return beginnerIconBounds;
+			case EASY: return easyIconBounds;
+			case MEDIUM: return mediumIconBounds;
+			case HARD: return hardIconBounds;
+			case ELITE: return eliteIconBounds;
+			case MASTER: return masterIconBounds;
+			default: return new Rectangle();
+		}
+	}
+
+	private void updateIconBounds(ClueTier tier, int x, int y, BufferedImage image) {
+		Rectangle bounds = new Rectangle(x, y, image.getWidth(), image.getHeight());
+		switch (tier) {
+			case BEGINNER:
+				beginnerIconBounds = bounds;
+				break;
+			case EASY:
+				easyIconBounds = bounds;
+				break;
+			case MEDIUM:
+				mediumIconBounds = bounds;
+				break;
+			case HARD:
+				hardIconBounds = bounds;
+				break;
+			case ELITE:
+				eliteIconBounds = bounds;
+				break;
+			case MASTER:
+				masterIconBounds = bounds;
+				break;
+		}
+	}
+
+	private BufferedImage getClueImage(ClueTier tier) {
+		switch (tier) {
+			case BEGINNER: return clueScrollBeginnerImage;
+			case EASY: return clueScrollEasyImage;
+			case MEDIUM: return clueScrollMediumImage;
+			case HARD: return clueScrollHardImage;
+			case ELITE: return clueScrollEliteImage;
+			case MASTER: return clueScrollMasterImage;
+			default: return null;
+		}
 	}
 
 	@Override
@@ -260,5 +275,47 @@ public class ClueSaverUI extends Overlay implements MouseListener {
 	@Override
 	public MouseEvent mouseDragged(MouseEvent e) {
 		return e;
+	}
+
+	private void logDebugInfo() {
+		if (clueStates == null) {
+			log.info("ClueStates is null");
+			return;
+		}
+
+		log.info("=== ClueStates Status Update ===");
+		for (ClueTier tier : ClueTier.values()) {
+			ClueScrollState clueState = clueStates.getClueStateFromTier(tier);
+			ScrollBoxState boxState = clueStates.getBoxStateFromTier(tier);
+			String savingCause = clueSaverPlugin.getTierSavingCause(tier, true);
+			int maxClueCount = clueSaverUtils.getMaxClueCount(tier, client);
+
+			StringBuilder status = new StringBuilder();
+			status.append(String.format("[%s] ", tier));
+
+			status.append(String.format("Max: %d", maxClueCount));
+
+			if (clueState != null) {
+				status.append(String.format(", Clue: %s",
+					clueState.getLocation() != ClueLocation.UNKNOWN ? clueState.getLocation() : "none"));
+			}
+
+			if (boxState != null) {
+				int totalBoxes = boxState.getTotalCount();
+				status.append(String.format(", Boxes: %d", totalBoxes));
+			}
+
+			if (savingCause != null && !savingCause.isEmpty()) {
+				String cleanCause = savingCause
+					.replaceAll("<col=[^>]+>", "")
+					.replaceAll("</col>", "")
+					.replaceAll("<br>", " | ")
+					.trim();
+				status.append(String.format(" | %s", cleanCause));
+			}
+
+			log.info(status.toString());
+		}
+		log.info("===========================");
 	}
 }
