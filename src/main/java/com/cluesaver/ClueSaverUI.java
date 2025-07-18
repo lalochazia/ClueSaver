@@ -95,17 +95,34 @@ public class ClueSaverUI extends Overlay implements MouseListener {
 			log.info("ClueStates is null in render method");
 			return null;
 		}
+
+		int visibleTierCount = 0;
+		for (ClueTier tier : ClueTier.values()) {
+			if (shouldShowTier(tier)) {
+				visibleTierCount++;
+			}
+		}
+
+		BufferedImage firstClueImage = getClueImage(ClueTier.values()[0]);
+		int clueImageHeight = firstClueImage != null ? firstClueImage.getHeight() : 0;
+		int padding = 2;
+		int totalHeight = (clueImageHeight + padding) * visibleTierCount;
+
 		final int closedUIX = 0;
-		final int closedUIY = (client.getCanvasHeight() - closedUIImage.getHeight()) / 2;
-		graphics.drawImage(closedUIImage, closedUIX, closedUIY, null);
+		final int closedUIY = (client.getCanvasHeight() - totalHeight) / 3;
+
+		graphics.drawImage(closedUIImage,
+			closedUIX, closedUIY,
+			closedUIX + closedUIImage.getWidth(), closedUIY + totalHeight,
+			0, 0,
+			closedUIImage.getWidth(), closedUIImage.getHeight(),
+			null);
 
 		if (isExpanded) {
 			final int expandedUIX = closedUIX + closedUIImage.getWidth();
 			final int expandedUIY = closedUIY;
-			graphics.drawImage(expandedUIImage, expandedUIX, expandedUIY, null);
-			final int startX = expandedUIX + 8;
+			final int startX = expandedUIX + 4;
 			final int startY = expandedUIY + 3;
-			final int padding = 2;
 
 			int currentY = startY;
 
@@ -181,12 +198,11 @@ public class ClueSaverUI extends Overlay implements MouseListener {
 				updateIconBounds(tier, startX, currentY, clueImage);
 				currentY = nextY;
 			}
-
 		}
 
 		final int buttonUIX = closedUIX + closedUIImage.getWidth() +
-			(isExpanded ? expandedUIImage.getWidth() : 0);
-		final int buttonUIY = closedUIY + 10;
+			(isExpanded ? 45 : 0);
+		final int buttonUIY = closedUIY + 8;
 		buttonBounds = new Rectangle(buttonUIX, buttonUIY,
 			buttonUIImage.getWidth(), buttonUIImage.getHeight());
 		BufferedImage buttonToDraw = isButtonHovered ? buttonUIHoveredImage : buttonUIImage;
